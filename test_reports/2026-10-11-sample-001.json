@@ -1,0 +1,86 @@
+{
+  "date": "2026-10-11",
+  "source_alias": "sample_001.mp3",
+  "source_audio_uploaded_to_github": false,
+  "validation": "partial",
+  "environment": {
+    "python": "3.13.5",
+    "ffmpeg": "7.1.5",
+    "gpu": false,
+    "autodl": false
+  },
+  "audio": {
+    "container": "mp3",
+    "codec": "mp3",
+    "duration_seconds": 2493.910204,
+    "size_bytes": 99865695,
+    "channels": 2,
+    "sample_rate_hz": 44100,
+    "container_bit_rate_bps": 320350,
+    "embedded_image_streams": 1
+  },
+  "tests": {
+    "unit_tests": {
+      "passed": 4,
+      "failed": 0
+    },
+    "window_plan": {
+      "passed": true,
+      "windows": 21,
+      "core_seconds": 120,
+      "side_overlap_seconds": 4
+    },
+    "decoded_windows": [
+      {
+        "index": 0,
+        "expected_seconds": 124,
+        "measured_seconds": 124
+      },
+      {
+        "index": 10,
+        "expected_seconds": 128,
+        "measured_seconds": 128
+      },
+      {
+        "index": 20,
+        "expected_seconds": 97.91,
+        "measured_seconds": 97.898
+      }
+    ],
+    "wav_clip": {
+      "passed": true,
+      "length_seconds": 10,
+      "sample_rate_hz": 24000,
+      "channels": 1,
+      "sample_width_bits": 16
+    },
+    "integration": {
+      "passed": true,
+      "real_audio_input": true,
+      "asr_is_mocked": true,
+      "exported_clips": 2,
+      "speaker_context_checked": true,
+      "resume_skip_passed": true
+    },
+    "asr": {
+      "status": "not_run",
+      "reason": "model weights unavailable"
+    },
+    "emotion": {
+      "status": "not_implemented"
+    },
+    "autodl": {
+      "status": "not_run"
+    }
+  },
+  "threshold_diagnostic": {
+    "method": "FFmpeg silencedetect",
+    "noise_threshold_dbfs": -38,
+    "min_duration_s": 0.55,
+    "interval_count": 891,
+    "total_low_level_s": 1088.72,
+    "median_interval_s": 1,
+    "max_interval_s": 6.48,
+    "interpretation": "not equivalent to voice activity"
+  }
+}

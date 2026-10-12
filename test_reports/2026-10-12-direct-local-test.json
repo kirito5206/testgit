@@ -1,0 +1,33 @@
+{
+  "date": "2026-10-12",
+  "mode": "direct_local_without_autodl",
+  "source_audio_uploaded": false,
+  "audio": {
+    "seconds": 2493.910204,
+    "bytes": 99865695,
+    "codec": "mp3",
+    "sample_rate_hz": 44100,
+    "channels": 2
+  },
+  "test_results": {
+    "full_decode": "passed",
+    "total_window_count": 21,
+    "decoded_windows_passed": 21,
+    "max_window_time_error_ms": 12,
+    "extracted_pcm_wav": "passed_24000hz_mono",
+    "unit_tests": "4/4_passed",
+    "mock_asr_audio_metadata_integration": "passed",
+    "context_generation": "passed",
+    "rerun_manifest_skip": "passed",
+    "pitch_rms_extraction": "sampled",
+    "real_asr": "not_run_no_model_weights",
+    "emotion_recognition": "not_run_no_model_weights"
+  },
+  "low_level_detection": {
+    "intervals": 891,
+    "seconds": 1088.72,
+    "threshold_dbfs": -38,
+    "min_duration_s": 0.55,
+    "not_ground_truth_silence": true
+  }
+}
