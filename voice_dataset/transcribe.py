@@ -13,6 +13,7 @@ import tempfile
 from pathlib import Path
 
 from .core import windows, clip_id
+from .audio_io import read_mono_pcm16
 
 SUPPORTED = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".mp4"}
 
@@ -88,9 +89,9 @@ def transcribe_file(model, path: Path, output: Path, args):
             execute("ffmpeg", "-nostdin", "-loglevel", "error", "-y",
                     "-ss", f"{window.read_start:.3f}", "-i", path,
                     "-t", f"{window.read_end-window.read_start:.3f}",
-                    "-ar", "16000", "-ac", "1", wav)
+                    "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav)
             segments, info = model.transcribe(
-                str(wav), language=None if args.language == "auto" else args.language,
+                read_mono_pcm16(wav), language=None if args.language == "auto" else args.language,
                 beam_size=args.beam_size, vad_filter=True,
                 word_timestamps=True, condition_on_previous_text=False)
             for segment in segments:
