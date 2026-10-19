@@ -5,6 +5,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 from .core import windows, split_asr_segment, merge_short, add_context, clip_id
+from .audio_io import read_mono_pcm16
 
 AUDIO_EXT={".wav",".mp3",".flac",".m4a",".ogg",".mp4"}
 
@@ -38,8 +39,8 @@ def process(path, root, out, model, args):
         with tempfile.TemporaryDirectory() as d:
             clip=Path(d)/"window.wav"
             ffmpeg("-ss",f"{w.read_start:.3f}","-i",path,"-t",
-                f"{w.read_end-w.read_start:.3f}","-ac","1","-ar","16000",clip)
-            segments,info=model.transcribe(str(clip),
+                f"{w.read_end-w.read_start:.3f}","-ac","1","-ar","16000","-c:a","pcm_s16le",clip)
+            segments,info=model.transcribe(read_mono_pcm16(clip),
                 language=None if args.language=="auto" else args.language,
                 vad_filter=True,word_timestamps=True,
                 condition_on_previous_text=False)
