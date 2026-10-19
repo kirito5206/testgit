@@ -6,9 +6,29 @@ A standalone speech recognition tool that uses **actual** faster-whisper model i
 
 Python 3.11 is recommended. Install FFmpeg for your operating system.
 
-```bash
-pip install -r requirements-voice.txt
+```powershell
+python -m pip install --upgrade pip
+python -m pip install -r requirements-voice.txt
 ```
+
+The requirements file pins the official **SYSTRAN/faster-whisper** source commit
+`2ce7f9d`, fixing PyAV 19 compatibility. Do not reinstall the older
+PyPI release with `pip install -U faster-whisper`, as that can bring back
+the `metadata_errors` exception. To explicitly install the official latest
+master source while keeping current dependencies:
+
+```powershell
+python -m pip install --force-reinstall --no-deps "faster-whisper @ https://github.com/SYSTRAN/faster-whisper/archive/refs/heads/master.tar.gz"
+```
+
+Check installation:
+
+```powershell
+python -c "import av, faster_whisper, faster_whisper.audio as a; print('PyAV:', av.__version__); print('faster-whisper:', faster_whisper.__version__); print('PyAV open kwargs:', getattr(a, '_AV_OPEN_KWARGS', 'source workaround not found'))"
+```
+
+On PyAV 19 the expected `PyAV open kwargs` is `{}`.
+
 
 ## Usage — laptop RTX 4060 (8 GB VRAM)
 
