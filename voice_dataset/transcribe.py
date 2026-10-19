@@ -112,7 +112,8 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--input", required=True, help="A file or folder of audio")
     p.add_argument("--output", required=True, help="Transcription output directory")
-    p.add_argument("--model", default="small", help="small, medium, large-v3, etc.")
+    p.add_argument("--model", default="small", help="small, medium, large-v3, or a local model directory")
+    p.add_argument("--offline", action="store_true", help="Load only local cached model files; do not access Hugging Face")
     p.add_argument("--device", default="cuda", choices=["cuda", "cpu"])
     p.add_argument("--compute-type", default="float16")
     p.add_argument("--language", default="auto", choices=["auto", "zh", "ja"])
@@ -137,7 +138,8 @@ def main():
         p.error("No input audio files")
     from faster_whisper import WhisperModel
     model = WhisperModel(args.model, device=args.device,
-                         compute_type=args.compute_type)
+                         compute_type=args.compute_type,
+                         local_files_only=args.offline)
     for f in files:
         key = clip_id(str(f), 0.0, 0.0)[:8]
         transcribe_file(model, f, output / (f.stem + "_" + key), args)
