@@ -60,7 +60,8 @@ def intervals_union(intervals, gap: float = 0.15):
     return merged
 
 
-def make_regions_detailed(intervals, min_s: float, max_s: float, join_gap: float):
+def make_regions_detailed(intervals, min_s: float, max_s: float, join_gap: float,
+                          merge_policy: str = "short-only"):
     """Group neighboring VAD turns, return (start, end, review_reason).
 
     Short isolated turns are kept for review; long uninterrupted speech is
@@ -70,6 +71,8 @@ def make_regions_detailed(intervals, min_s: float, max_s: float, join_gap: float
     """
     if not (0 < min_s < max_s and 0 <= join_gap):
         raise ValueError("Require 0 < min_s < max_s and nonnegative join_gap")
+    if merge_policy not in {"short-only", "all"}:
+        raise ValueError("merge_policy must be short-only or all")
     regions = []
     for start, end in intervals_union(intervals):
         if end - start > max_s:
@@ -80,7 +83,10 @@ def make_regions_detailed(intervals, min_s: float, max_s: float, join_gap: float
                 cursor = stop
         elif (regions and regions[-1][2] is None and
               0 <= start - regions[-1][1] <= join_gap and
-              end - regions[-1][0] <= max_s):
+              end - regions[-1][0] <= max_s and
+              (merge_policy == "all" or
+               regions[-1][1] - regions[-1][0] < min_s or
+               end - start < min_s)):
             prev = regions[-1]
             regions[-1] = (prev[0], end, None)
         else:
@@ -165,7 +171,8 @@ def process_recording(path: Path, speaker: str, source: str,
     intervals = vad_intervals(path, vad, executable, length,
                               args.window_seconds, args.overlap_seconds)
     regions = make_regions_detailed(intervals, args.min_seconds,
-                                    args.max_seconds, args.join_gap_seconds)
+                                    args.max_seconds, args.join_gap_seconds,
+                                    getattr(args, "merge_policy", "short-only"))
     records = []
     for i, (start, end, boundary_reason) in enumerate(regions, 1):
         # Keep moderate speech-boundary padding, never exceed 29 s ASR limit.
@@ -182,6 +189,8 @@ def process_recording(path: Path, speaker: str, source: str,
                     start=round(audio_start, 3), end=round(audio_end, 3),
                     vad_start=start, vad_end=end,
                     boundary_reason=boundary_reason,
+                    merge_policy=getattr(args, "merge_policy", "short-only"),
+                    join_gap_seconds=args.join_gap_seconds,
                     language="unknown", text="", audio=None,
                     context_before=[], context_after=[],
                     prediction_tags=[], acoustic_emotion_candidate=None,
@@ -243,6 +252,9 @@ def main():
     p.add_argument("--min-seconds", type=float, default=3)
     p.add_argument("--max-seconds", type=float, default=25)
     p.add_argument("--join-gap-seconds", type=float, default=0.7)
+    p.add_argument("--merge-policy", choices=["short-only", "all"],
+                   default="short-only",
+                   help="short-only joins when at least one segment is short; all is legacy behavior")
     p.add_argument("--padding-seconds", type=float, default=0.12)
     p.add_argument("--ffmpeg-exe", default=None)
     p.add_argument("--overwrite", action="store_true")
