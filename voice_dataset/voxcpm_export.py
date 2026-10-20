@@ -131,6 +131,7 @@ def load_candidates(metadata: Path, root: Path, output: Path, args) -> tuple[lis
         for number, line in enumerate(f, 1):
             if not line.strip():
                 continue
+            row = None
             try:
                 row = json.loads(line)
                 if not isinstance(row, dict):
@@ -167,7 +168,7 @@ def load_candidates(metadata: Path, root: Path, output: Path, args) -> tuple[lis
                                    human_verified=row.get("human_verified") is True))
             except (ValueError, RuntimeError, json.JSONDecodeError, OSError, TypeError) as ex:
                 audit.append(dict(line=number, reason=str(ex)[:160],
-                                  speaker_id=str(row.get("speaker_id", "")) if isinstance(locals().get("row"), dict) else ""))
+                                  speaker_id=str(row.get("speaker_id", "")) if isinstance(row, dict) else ""))
                 continue
     return result, audit
 
@@ -244,6 +245,10 @@ def build(args) -> dict:
     report = dict(total_accepted=len(samples), excluded=len(audit),
                   train=len(train_json), val=len(val_json),
                   train_ref_audio=ref_train, val_ref_audio=ref_val,
+                  unverified_accepted=sum(not x["human_verified"] for x in samples),
+                  train_sessions=len({(x["speaker_id"], x["source"]) for x in train}),
+                  val_sessions=len({(x["speaker_id"], x["source"]) for x in val}),
+                  accepted_hours=round(sum(x["duration"] for x in samples) / 3600, 3),
                   no_validation_speakers=no_val,
                   languages=dict(Counter(x["language"] for x in samples)),
                   rejected_reasons=dict(Counter(x["reason"] for x in audit)),
@@ -271,7 +276,11 @@ def main():
     p.add_argument("--ref-fraction", type=float, default=0.4)
     p.add_argument("--seed", type=int, default=2026)
     args = p.parse_args()
-    print(json.dumps(build(args), ensure_ascii=False, indent=2))
+    result = build(args)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    if result["unverified_accepted"]:
+        print("WARNING: This export contains machine-labelled audio with no human "
+              "transcript verification; audit before VoxCPM2 LoRA training.")
 
 
 if __name__ == "__main__":
