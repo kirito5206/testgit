@@ -213,3 +213,30 @@ candidate_rows_to_retranscribe 包括为了保持文本准确性而需要重新
 
 新版本把 review_short 与 review_forced_cut 分开，不会将硬切区间直接接受。
 原训练集 val 为 0，仍需要另一独立录音会话才能建立验证集。
+
+## 7. 对比 2 秒和 3 秒：仅合并短片段
+
+早期 estimate_short_recovery 结果（2 秒约 132 条，3 秒约 146 条）使用全局贪心合并。
+这些数值并不是新的 short-only 模式的结果，不可直接用于选择。
+脚本已支持 --merge-policy short-only（处理长录音时也是默认策略），
+它只有在前/后至少一个片段小于 3 秒、且合并后不超过最大时长时才合并；
+避免无意义地合并两个已经合格的长句。
+
+PowerShell：
+
+~~~powershell
+git pull origin feat/voxcpm2-lora-dataset
+& "D:\miniconda\envs\sensevoice311\python.exe" -m voice_dataset.estimate_short_recovery --metadata ".\processed\metadata.jsonl" --gaps "1.2,2.0,3.0" --merge-policy short-only
+~~~
+
+旧数据集只保存合并过的近似 VAD 边界，仍无法完整重建底层原始 VAD 区间，
+所以新预估数量只是用于选择实验参数，不是真正回收率。
+
+在独立目录里运行短片段专用的 2 秒 ASR：
+
+~~~powershell
+& "D:\miniconda\envs\sensevoice311\python.exe" -m voice_dataset.sensevoice_long --input ".\稀贩1姐弟.mp3" --speaker-id speaker_001 --output ".\processed_short20" --language zh --device cuda:0 --vad-device cpu --join-gap-seconds 2 --merge-policy short-only
+~~~
+
+可将 3 秒作为后续单独的消融实验，不要覆盖 processed_short20。
+在加入训练前对合并片段重新识别并人工试听及核对文本。
