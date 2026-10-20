@@ -113,6 +113,8 @@ def source_files(input_path: Path, speaker_id: str | None):
     if input_path.is_file():
         if not speaker_id:
             raise ValueError("--speaker-id is required for a single recording")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", speaker_id):
+            raise ValueError("Use an ASCII speaker ID containing letters, digits, _ or -")
         return [(input_path, speaker_id, f"{speaker_id}/{input_path.name}")]
     files = []
     for path in sorted(input_path.rglob("*")):
@@ -120,6 +122,8 @@ def source_files(input_path: Path, speaker_id: str | None):
             rel = path.relative_to(input_path)
             if len(rel.parts) < 2:
                 raise ValueError("Folder input needs raw/<speaker_id>/<recording>")
+            if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", rel.parts[0]):
+                raise ValueError("Speaker directories must be safe ASCII IDs: " + rel.parts[0])
             files.append((path, rel.parts[0], rel.as_posix()))
     return files
 
@@ -187,6 +191,8 @@ def process_recording(path: Path, speaker: str, source: str,
                 item["audio"] = clip_rel.as_posix()
                 item["status"] = "accepted"
         except Exception as error:
+            if "out of memory" in str(error).lower() or "cuda error" in str(error).lower():
+                raise RuntimeError("ASR GPU exhausted; reduce maximum segment length or free VRAM") from error
             item["status"] = "review_runtime_error"
             item["error"] = f"{type(error).__name__}: {str(error)[:160]}"
         records.append(item)
