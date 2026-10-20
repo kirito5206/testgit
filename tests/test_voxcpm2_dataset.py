@@ -96,6 +96,49 @@ class VoxCPMBuilderTests(unittest.TestCase):
             self.assertEqual(out["scenarios"][0]["candidate_short_rows_recovered"], 0)
             self.assertEqual(out["scenarios"][1]["candidate_short_rows_recovered"], 1)
 
+    def test_short_only_does_not_merge_two_long_clips(self):
+        rows = [
+            dict(start=0.0, end=5.0, status="accepted", line=1, precise=True),
+            dict(start=5.8, end=10.8, status="accepted", line=2, precise=True),
+            dict(start=11.6, end=12.7, status="review_short", line=3, precise=True),
+        ]
+        _, selected_short, groups_short = simulate(
+            rows, 2, 25, merge_policy="short-only")
+        self.assertEqual(selected_short, {2, 3})
+        self.assertEqual(groups_short[0]["count"], 2)
+        _, selected_all, groups_all = simulate(
+            rows, 2, 25, merge_policy="all")
+        self.assertEqual(selected_all, {1, 2, 3})
+        self.assertEqual(groups_all[0]["count"], 3)
+        vad_short = make_regions_detailed(
+            [(0, 5), (5.8, 10.8), (11.6, 12.7)], 3, 25, 2,
+            merge_policy="short-only")
+        self.assertEqual(len(vad_short), 2)
+        self.assertEqual(vad_short[0], (0, 5, None))
+        self.assertEqual(vad_short[1], (5.8, 12.7, None))
+        vad_all = make_regions_detailed(
+            [(0, 5), (5.8, 10.8), (11.6, 12.7)], 3, 25, 2,
+            merge_policy="all")
+        self.assertEqual(len(vad_all), 1)
+
+    def test_estimator_default_matches_short_only_policy(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "metadata.jsonl"
+            records = [
+                dict(start=0.0, end=5.0, status="accepted", speaker_id="s", source="a",
+                     vad_start=0.0, vad_end=5.0),
+                dict(start=5.8, end=10.8, status="accepted", speaker_id="s", source="a",
+                     vad_start=5.8, vad_end=10.8),
+                dict(start=11.6, end=12.7, status="review_short", speaker_id="s", source="a",
+                     vad_start=11.6, vad_end=12.7),
+            ]
+            path.write_text("\n".join(json.dumps(r) for r in records), encoding="utf-8")
+            short = estimate(path, gaps=(2.0,))
+            legacy = estimate(path, gaps=(2.0,), merge_policy="all")
+            self.assertEqual(short["merge_policy"], "short-only")
+            self.assertEqual(short["scenarios"][0]["candidate_rows_to_retranscribe"], 2)
+            self.assertEqual(legacy["scenarios"][0]["candidate_rows_to_retranscribe"], 3)
+
     def test_tail_detector(self):
         pcm = np.concatenate((np.ones(16000, dtype=np.int16) * 7000,
                               np.zeros(16000, dtype=np.int16)))
