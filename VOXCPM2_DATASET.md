@@ -240,3 +240,50 @@ git pull origin feat/voxcpm2-lora-dataset
 
 可将 3 秒作为后续单独的消融实验，不要覆盖 processed_short20。
 在加入训练前对合并片段重新识别并人工试听及核对文本。
+
+
+## 8. 随机抽样 30 条，人工逐字核验音频—文本
+
+这个工具在本机生成一个带音频播放器的 review.html。不会上传录音，
+不会调用模型；可以逐条播放、修正文本、选择通过/不确定/拒绝并导出核验结果。
+
+### 生成抽样审核页面
+
+~~~powershell
+& "D:\miniconda\envs\sensevoice311\python.exe" -m voice_dataset.manual_audit prepare --metadata ".\processed_short20\metadata.jsonl" --output ".\manual_audit_30" --count 30 --seed 42
+~~~
+
+双击 .\manual_audit_30\review.html，建议用 Edge 或 Chrome 打开。
+页面里的音频副本和转写都在本机 manual_audit_30 文件夹中。
+
+每条都要完整播放，核对漏字、错字、重复字、语气词、人名/数字、结尾截断。
+结论选择：
+- pass：逐字正确；
+- corrected：已编辑成与音频一致的文字；
+- uncertain：听不清，不猜测；
+- reject：音频切分/质量不适合训练。
+
+有问题时勾选错误类型并记备注。完成后点击“导出核验结果 JSON”，浏览器会下载
+audit_results.json。将它复制到 .\manual_audit_30\audit_results.json。
+
+### 应用核验结果（原始 metadata 不会被覆盖）
+
+~~~powershell
+Copy-Item "$HOME\Downloads\audit_results.json" ".\manual_audit_30\audit_results.json"
+
+& "D:\miniconda\envs\sensevoice311\python.exe" -m voice_dataset.manual_audit apply --metadata ".\processed_short20\metadata.jsonl" --audit ".\manual_audit_30\audit_results.json" --output ".\processed_short20\metadata_verified.jsonl"
+~~~
+
+pass / corrected 会设置 human_verified=true；文字修改会写回新 metadata。
+uncertain / reject 会标为人工审核状态，不会被导出器当作合格样本。
+脚本会校验元数据行指纹；如果原始 metadata 在抽样后被改过，会拒绝套用结果。
+
+### 仅导出通过人工核验的样本
+
+~~~powershell
+& "D:\miniconda\envs\sensevoice311\python.exe" -m voice_dataset.voxcpm_export --metadata ".\processed_short20\metadata_verified.jsonl" --input-root ".\processed_short20" --output ".\voxcpm2_verified30" --languages zh --min-seconds 3 --max-seconds 25 --ref-fraction 0.4 --verified-only
+~~~
+
+检查 .\voxcpm2_verified30\quality_report.json。只有人工通过/修正的样本会进入训练候选。
+抽样 30 条只用于初次估计标注质量，不代表剩余样本已通过核验。核验时请以实际听到的声音为准，
+不要让另一个 ASR 的输出直接替代人工判断。
