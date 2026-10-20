@@ -173,7 +173,7 @@ def process_recording(path: Path, speaker: str, source: str,
         try:
             extract(executable, path, clip_path, audio_start, audio_end)
             result = asr.generate(input=str(clip_path), language=args.language,
-                                  use_itn=True, batch_size_s=30)
+                                  use_itn=False, batch_size_s=30)
             if not result or not result[0].get("text"):
                 raise ValueError("empty ASR result")
             raw = str(result[0]["text"])
