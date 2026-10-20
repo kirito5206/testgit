@@ -142,7 +142,8 @@ def load_candidates(metadata: Path, root: Path, output: Path, args) -> tuple[lis
                 src = str(row.get("source") or "").strip()
                 audio = row.get("audio")
                 if row.get("status", "accepted") != "accepted":
-                    raise ValueError("source_not_accepted")
+                    status = str(row.get("status") or "unknown").strip()
+                    raise ValueError(f"upstream_status:{status}")
                 if not speaker or not src or not isinstance(audio, str) or not audio:
                     raise ValueError("missing_speaker_source_or_audio")
                 if language not in allowed_languages:
@@ -168,7 +169,11 @@ def load_candidates(metadata: Path, root: Path, output: Path, args) -> tuple[lis
                                    human_verified=row.get("human_verified") is True))
             except (ValueError, RuntimeError, json.JSONDecodeError, OSError, TypeError) as ex:
                 audit.append(dict(line=number, reason=str(ex)[:160],
-                                  speaker_id=str(row.get("speaker_id", "")) if isinstance(row, dict) else ""))
+                                  speaker_id=str(row.get("speaker_id", "")) if isinstance(row, dict) else "",
+                                  source=str(row.get("source", "")) if isinstance(row, dict) else "",
+                                  start=row.get("start") if isinstance(row, dict) else None,
+                                  end=row.get("end") if isinstance(row, dict) else None,
+                                  upstream_status=str(row.get("status", "")) if isinstance(row, dict) else ""))
                 continue
     return result, audit
 
@@ -252,6 +257,10 @@ def build(args) -> dict:
                   no_validation_speakers=no_val,
                   languages=dict(Counter(x["language"] for x in samples)),
                   rejected_reasons=dict(Counter(x["reason"] for x in audit)),
+                  upstream_rejected_statuses=dict(Counter(
+                      x["upstream_status"] for x in audit
+                      if x["reason"].startswith("upstream_status:")
+                  )),
                   note="No ASR accuracy or speaker purity is guaranteed; manually review before LoRA.")
     (output / "quality_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2)+"\n",
                                                  encoding="utf-8")
