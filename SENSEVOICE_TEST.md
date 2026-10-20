@@ -48,3 +48,37 @@ Do not commit personal audio, transcripts or speaker data to the public repo.
 Once this real 20s transcription succeeds, add validated VAD-based batching
 for the full recording and export proper VAD-region timestamps. No word-level
 alignment or language-switch detection is claimed by this smoke test.
+
+
+## Troubleshooting: `Unrecognized option 'hide_banner'`
+
+This happens when the executable resolved as `ffmpeg` on Windows is old or
+is not the expected FFmpeg build, **after** SenseVoice weights have loaded.
+It is not a CUDA or ModelScope model error.
+
+The script now prefers the version supplied by `imageio-ffmpeg`:
+
+```powershell
+& "D:\miniconda\envs\sensevoice311\python.exe" -m pip install -U imageio-ffmpeg
+& "D:\miniconda\envs\sensevoice311\python.exe" -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())"
+```
+
+Update the source branch and retry. The script logs the exact binary used as
+`FFmpeg executable: ...` and checks decoding **before** loading model weights.
+
+To diagnose PATH resolution on Windows:
+
+```powershell
+Get-Command ffmpeg -All
+where.exe ffmpeg
+ffmpeg -version
+```
+
+For a manually downloaded official FFmpeg, you can explicitly select it
+with `--ffmpeg-exe "C:\path\to\ffmpeg.exe"`.
+
+Run pure audio-decoding unit tests before inference:
+
+```powershell
+& "D:\miniconda\envs\sensevoice311\python.exe" -m unittest tests.test_sensevoice_ffmpeg -v
+```
