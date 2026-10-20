@@ -60,23 +60,40 @@ def intervals_union(intervals, gap: float = 0.15):
     return merged
 
 
-def make_regions(intervals, min_s: float, max_s: float, join_gap: float):
-    """Merge nearby VAD intervals; flag forced cuts for manual verification."""
+def make_regions_detailed(intervals, min_s: float, max_s: float, join_gap: float):
+    """Group neighboring VAD turns, return (start, end, review_reason).
+
+    Short isolated turns are kept for review; long uninterrupted speech is
+    hard-cut only into *review* regions and is never silently promoted to
+    a training sample. An interval can join a previous interval only when
+    its original gap and combined length satisfy the limits.
+    """
+    if not (0 < min_s < max_s and 0 <= join_gap):
+        raise ValueError("Require 0 < min_s < max_s and nonnegative join_gap")
     regions = []
     for start, end in intervals_union(intervals):
-        if regions and not regions[-1][2] and start - regions[-1][1] <= join_gap and end - regions[-1][0] <= max_s:
-            prev = regions[-1]
-            regions[-1] = (prev[0], end, False)
-        elif end - start > max_s:
+        if end - start > max_s:
             cursor = start
             while cursor < end - 1e-3:
-                stop = min(end, cursor + max_s)
-                regions.append((cursor, stop, True))
+                stop = min(cursor + max_s, end)
+                regions.append((cursor, stop, "forced_cut"))
                 cursor = stop
+        elif (regions and regions[-1][2] is None and
+              0 <= start - regions[-1][1] <= join_gap and
+              end - regions[-1][0] <= max_s):
+            prev = regions[-1]
+            regions[-1] = (prev[0], end, None)
         else:
-            regions.append((start, end, False))
-    return [(round(a, 3), round(b, 3), review or b-a < min_s)
-            for a, b, review in regions]
+            regions.append((start, end, None))
+    return [(round(a, 3), round(b, 3),
+             reason or ("too_short" if b - a < min_s else None))
+            for a, b, reason in regions]
+
+
+def make_regions(intervals, min_s: float, max_s: float, join_gap: float):
+    """Legacy three-tuple API for existing test fixtures."""
+    return [(a, b, reason is not None)
+            for a, b, reason in make_regions_detailed(intervals, min_s, max_s, join_gap)]
 
 
 def vad_intervals(path: Path, vad, executable: str, duration: float,
@@ -147,23 +164,30 @@ def process_recording(path: Path, speaker: str, source: str,
     length = ffmpeg_duration(path, executable)
     intervals = vad_intervals(path, vad, executable, length,
                               args.window_seconds, args.overlap_seconds)
-    regions = make_regions(intervals, args.min_seconds,
-                           args.max_seconds, args.join_gap_seconds)
+    regions = make_regions_detailed(intervals, args.min_seconds,
+                                    args.max_seconds, args.join_gap_seconds)
     records = []
-    for i, (start, end, manual_review) in enumerate(regions, 1):
+    for i, (start, end, boundary_reason) in enumerate(regions, 1):
         # Keep moderate speech-boundary padding, never exceed 29 s ASR limit.
         audio_start = max(0, start - args.padding_seconds)
         audio_end = min(length, end + args.padding_seconds)
-        if audio_end - audio_start > 29:
-            manual_review = True
+        if audio_end - audio_start > 29 and boundary_reason is None:
+            boundary_reason = "asr_window_too_long"
+        status_for_reason = {
+            "too_short": "review_short",
+            "forced_cut": "review_forced_cut",
+            "asr_window_too_long": "review_asr_window",
+        }
         item = dict(speaker_id=speaker, source=source,
                     start=round(audio_start, 3), end=round(audio_end, 3),
+                    vad_start=start, vad_end=end,
+                    boundary_reason=boundary_reason,
                     language="unknown", text="", audio=None,
                     context_before=[], context_after=[],
                     prediction_tags=[], acoustic_emotion_candidate=None,
                     human_verified=False, label_source="SenseVoiceSmall+FSMN-VAD",
-                    status="review_boundary" if manual_review else "pending")
-        if manual_review:
+                    status=status_for_reason.get(boundary_reason, "pending"))
+        if boundary_reason:
             records.append(item)
             continue
         clip_id = hashlib.sha256(f"{source}|{audio_start:.3f}|{audio_end:.3f}".encode()).hexdigest()[:20]
