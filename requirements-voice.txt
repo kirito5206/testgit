@@ -1,0 +1,3 @@
+# Official faster-whisper source with the PyAV 19 compatibility fix (SYSTRAN/faster-whisper#1589).
+# Pin to a known fixed commit instead of reinstalling incompatible PyPI 1.2.1.
+faster-whisper @ https://github.com/SYSTRAN/faster-whisper/archive/2ce7f9d.tar.gz
