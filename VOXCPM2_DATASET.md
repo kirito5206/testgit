@@ -150,3 +150,34 @@ python scripts/train_voxcpm_finetune.py --config_path conf/my_lora.yaml
 - 没有人工核对转写之前，不应宣称语音文本严格对应。
 - 训练清单的声学路径是本机绝对路径，迁移机器要重新导出。
 - 禁止将未授权人物声音、原音频、私密转写或声纹上传公开 GitHub。
+
+
+## 5. 排查大批 review_boundary：无需重新跑 41 分钟 ASR
+
+旧版长录音处理脚本将过短（<3 秒）和长语音强制切段两种情况
+都标记为 review_boundary。可以直接对现有 metadata.jsonl 统计：
+
+~~~powershell
+cd "D:\CODE\music\testgit"
+git pull origin feat/voxcpm2-lora-dataset
+& "D:\miniconda\envs\sensevoice311\python.exe" -m voice_dataset.inspect_boundaries --metadata ".\processed\metadata.jsonl"
+~~~
+
+这条命令**不会加载模型、不生成或修改训练样本**，也不会上传个人录音。
+主要关注输出里的
+legacy_duration_estimates_not_ground_truth 和 review_duration_bins。
+旧版 metadata 保存的是有边缘填充的片段时长，因此分类只是启发式估计：
+
+- likely_short：更像短于最小训练时长的片段；
+- likely_forced_cut：更像超过 VAD 最大长度的连续语音；
+- ambiguous：仅靠旧版时间信息不能确认。
+
+如果短段占多数，可以在**新的输出目录**重跑 SenseVoice+VAD，并尝试增大
+--join-gap-seconds（例如从 0.7 改为 1.2）。
+合并后的文本必须重新 ASR，不允许直接复用两个短段旧文本。
+如果 forced_cut 占多数，需要在适当的停顿处重新分句，
+不能直接把硬切的语音自动放入 VoxCPM2 训练数据。
+
+新版处理后的 metadata 将显式使用 review_short / review_forced_cut，
+并提供 boundary_reason、vad_start、vad_end，方便后续定点审核。
+旧版已有音频和元数据不会被新的诊断命令篡改。
