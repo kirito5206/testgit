@@ -8,19 +8,59 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 
 
+def resolve_ffmpeg(explicit_path: str | None = None) -> str:
+    """Prefer a known FFmpeg binary bundled by imageio-ffmpeg.
+
+    This avoids picking up stale or incompatible executables on Windows PATH.
+    """
+    if explicit_path:
+        candidate = Path(explicit_path).expanduser()
+        if candidate.is_file():
+            return str(candidate.resolve())
+        located = shutil.which(explicit_path)
+        if located:
+            return located
+        raise FileNotFoundError(f"FFmpeg executable not found: {explicit_path}")
+
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except (ImportError, RuntimeError, OSError):
+        located = shutil.which("ffmpeg")
+        if located:
+            return located
+        raise FileNotFoundError(
+            "No FFmpeg binary found. Run: python -m pip install imageio-ffmpeg"
+        )
+
+
 def extract_pcm16(input_audio: Path, output_wav: Path,
-                  start: float, seconds: float) -> None:
-    subprocess.run(
-        ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error",
-         "-y", "-ss", f"{start:.3f}", "-i", str(input_audio),
-         "-t", f"{seconds:.3f}", "-ac", "1", "-ar", "16000",
-         "-c:a", "pcm_s16le", str(output_wav)],
-        check=True)
+                  start: float, seconds: float,
+                  ffmpeg_exe: str = "ffmpeg") -> None:
+    command = [
+        ffmpeg_exe, "-nostdin", "-hide_banner", "-loglevel", "error",
+        "-y", "-ss", f"{start:.3f}", "-i", str(input_audio),
+        "-t", f"{seconds:.3f}", "-ac", "1", "-ar", "16000",
+        "-c:a", "pcm_s16le", str(output_wav),
+    ]
+    result = subprocess.run(
+        command, capture_output=True, text=True, errors="replace"
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"FFmpeg ({ffmpeg_exe}) failed with exit code "
+            f"{result.returncode}:\n{result.stderr.strip()}\n"
+            "Install imageio-ffmpeg or use --ffmpeg-exe to specify "
+            "a newer FFmpeg executable."
+        )
+    if not output_wav.is_file() or output_wav.stat().st_size == 0:
+        raise RuntimeError("FFmpeg produced an empty output file")
 
 
 def main():
@@ -33,6 +73,8 @@ def main():
                         help="cuda:0 on NVIDIA laptop, or cpu")
     parser.add_argument("--language", choices=["auto", "zh", "ja"],
                         default="auto")
+    parser.add_argument("--ffmpeg-exe", default=None,
+                        help="Override FFmpeg executable; default prefers imageio-ffmpeg")
     parser.add_argument("--start", type=float, default=30.0)
     parser.add_argument("--seconds", type=float, default=20.0)
     args = parser.parse_args()
@@ -46,11 +88,14 @@ def main():
     from funasr import AutoModel
     from funasr.utils.postprocess_utils import rich_transcription_postprocess
 
-    print(f"Loading SenseVoiceSmall: {args.model}", flush=True)
-    model = AutoModel(model=args.model, device=args.device)
+    ffmpeg_exe = resolve_ffmpeg(args.ffmpeg_exe)
+    print(f"FFmpeg executable: {ffmpeg_exe}", flush=True)
     with tempfile.TemporaryDirectory(prefix="sensevoice-") as folder:
         window = Path(folder) / "excerpt.wav"
-        extract_pcm16(input_path, window, args.start, args.seconds)
+        extract_pcm16(input_path, window, args.start, args.seconds, ffmpeg_exe)
+        print(f"Loading SenseVoiceSmall: {args.model}", flush=True)
+        model = AutoModel(model=args.model, device=args.device,
+                          disable_update=True)
         result = model.generate(input=str(window), language=args.language,
                                 use_itn=True, batch_size_s=30)
     if not result or "text" not in result[0]:
