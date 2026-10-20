@@ -1,0 +1,5 @@
+# Data preparation only. Install suitable CUDA PyTorch separately.
+funasr>=1.4,<2
+modelscope>=1.15
+numpy>=1.26,<3
+imageio-ffmpeg>=0.6
