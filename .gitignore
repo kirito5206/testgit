@@ -127,3 +127,24 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Voice research private assets: NEVER commit raw voices, transcriptions or weights
+/raw/
+/processed/
+/voxcpm2_data/
+/voxcpm2_verified/
+/asr_output/
+/models/
+/checkpoints/
+/logs/
+*.mp3
+*.m4a
+*.flac
+*.ogg
+*.wav
+*.srt
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.jsonl
