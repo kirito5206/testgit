@@ -13,6 +13,7 @@ import numpy as np
 
 from voice_dataset.sensevoice_long import intervals_union, make_regions, make_regions_detailed, raw_language
 from voice_dataset.inspect_boundaries import diagnostic
+from voice_dataset.estimate_short_recovery import estimate, simulate, project_vad_bounds
 from voice_dataset.voxcpm_export import build, trailing_silence_ms
 
 
@@ -66,6 +67,34 @@ class VoxCPMBuilderTests(unittest.TestCase):
             self.assertEqual(report["legacy_duration_estimates_not_ground_truth"]["likely_forced_cut"], 1)
             self.assertEqual(report["explicit_boundary_reasons"]["too_short"], 1)
             self.assertEqual(report["legacy_review_boundary_rows"], 2)
+
+    def test_recovery_gap_scenarios(self):
+        rows = [
+            dict(start=0.0, end=3.2, status="accepted", line=1, precise=False),
+            dict(start=4.08, end=5.88, status="review_boundary", line=2, precise=False),
+            dict(start=8.5, end=10.0, status="review_boundary", line=3, precise=False),
+        ]
+        intervals = project_vad_bounds(rows, 0.12)
+        with_gap_07, _, _ = simulate(intervals, 0.7, 25)
+        with_gap_12, reassess, _ = simulate(intervals, 1.2, 25)
+        self.assertNotIn(2, with_gap_07)
+        self.assertIn(2, with_gap_12)
+        self.assertIn(1, reassess)  # Existing accepted clip must also be re-ASR'd.
+        self.assertNotIn(3, with_gap_12)
+
+    def test_short_recovery_grouped_by_source(self):
+        with tempfile.TemporaryDirectory() as d:
+            metadata = Path(d) / "metadata.jsonl"
+            records = [
+                dict(start=0, end=4, status="accepted", speaker_id="s1", source="a"),
+                dict(start=4.8, end=6, status="review_boundary", speaker_id="s1", source="a"),
+                dict(start=6.2, end=7, status="review_boundary", speaker_id="s1", source="b"),
+            ]
+            metadata.write_text("\n".join(json.dumps(r) for r in records), encoding="utf-8")
+            out = estimate(metadata, gaps=(0.7, 1.2))
+            self.assertEqual(out["original_short_rows"], 2)
+            self.assertEqual(out["scenarios"][0]["candidate_short_rows_recovered"], 0)
+            self.assertEqual(out["scenarios"][1]["candidate_short_rows_recovered"], 1)
 
     def test_tail_detector(self):
         pcm = np.concatenate((np.ones(16000, dtype=np.int16) * 7000,
