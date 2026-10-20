@@ -64,6 +64,10 @@ class VoxCPMBuilderTests(unittest.TestCase):
                 text="こんにちは", speaker_id="speaker_002",
                 source="speaker_002/session_ja.mp3", language="ja",
                 status="accepted", human_verified=False))
+            rows.append(dict(audio=None, text="", speaker_id="speaker_001",
+                source="speaker_001/session_a.mp3", language="zh",
+                status="review_boundary", start=7.0, end=32.0,
+                human_verified=False))
             metadata = root / "metadata.jsonl"
             metadata.write_text("\n".join(json.dumps(x, ensure_ascii=False) for x in rows) + "\n",
                                 encoding="utf-8")
@@ -76,7 +80,9 @@ class VoxCPMBuilderTests(unittest.TestCase):
                 ref_fraction=1.0, seed=2026)
             report = build(args)
             self.assertEqual(report["total_accepted"], 6)
-            self.assertEqual(report["excluded"], 1)
+            self.assertEqual(report["excluded"], 2)
+            self.assertEqual(report["upstream_rejected_statuses"], {"review_boundary": 1})
+            self.assertEqual(report["rejected_reasons"]["upstream_status:review_boundary"], 1)
             train = [json.loads(x) for x in (out / "train.jsonl").read_text(encoding="utf-8").splitlines()]
             val = [json.loads(x) for x in (out / "val.jsonl").read_text(encoding="utf-8").splitlines()]
             self.assertEqual(len(train) + len(val), 6)
