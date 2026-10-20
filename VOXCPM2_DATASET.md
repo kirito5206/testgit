@@ -181,3 +181,35 @@ legacy_duration_estimates_not_ground_truth 和 review_duration_bins。
 新版处理后的 metadata 将显式使用 review_short / review_forced_cut，
 并提供 boundary_reason、vad_start、vad_end，方便后续定点审核。
 旧版已有音频和元数据不会被新的诊断命令篡改。
+
+
+## 6. 先模拟不同的 VAD 合并间隔再决定是否重跑识别
+
+如果之前的报告显示大部分 review_boundary 是 3 秒以下的短句，
+可以仅使用现有 metadata.jsonl（不需要音频、不加载任何模型），
+预估变更间隔后能覆盖多少条：
+
+~~~powershell
+& "D:\miniconda\envs\sensevoice311\python.exe" -m voice_dataset.estimate_short_recovery --metadata ".\processed\metadata.jsonl" --gaps "0.7,1.2,1.5"
+~~~
+
+结果中的 candidate_short_rows_recovered 是**预计合并后值得重新识别的短句数量**，
+candidate_rows_to_retranscribe 包括为了保持文本准确性而需要重新
+识别的相邻已接收片段。该程序不会编辑源音频与训练集。
+
+旧版 metadata 的时间区间包含声学填充；模拟会扣除默认两侧 0.12 秒，
+但仍不是实际 VAD 区间，数字只是用于**选择参数**，不是最后回收成功数量。
+
+如果 1.2 秒相比 0.7 秒能明显增加合并候选，才在**全新文件夹**
+运行重新标注：
+
+~~~powershell
+& "D:\miniconda\envs\sensevoice311\python.exe" -m voice_dataset.sensevoice_long --input ".\稀贩1姐弟.mp3" --speaker-id speaker_001 --output ".\processed_gap12" --language zh --device cuda:0 --vad-device cpu --join-gap-seconds 1.2
+~~~
+
+随后先抽样审核合并边界的文字与内容，再将
+.\processed_gap12\metadata.jsonl 导出到新的 VoxCPM2 目录。
+不要把处理前后的所有片段混合训练——两种切分可能重复覆盖原始声音。
+
+新版本把 review_short 与 review_forced_cut 分开，不会将硬切区间直接接受。
+原训练集 val 为 0，仍需要另一独立录音会话才能建立验证集。
