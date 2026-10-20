@@ -11,7 +11,8 @@ from pathlib import Path
 
 import numpy as np
 
-from voice_dataset.sensevoice_long import intervals_union, make_regions, raw_language
+from voice_dataset.sensevoice_long import intervals_union, make_regions, make_regions_detailed, raw_language
+from voice_dataset.inspect_boundaries import diagnostic
 from voice_dataset.voxcpm_export import build, trailing_silence_ms
 
 
@@ -37,6 +38,34 @@ class VoxCPMBuilderTests(unittest.TestCase):
         self.assertEqual(regions[0], (0, 5, False))
         self.assertEqual(raw_language("<|ja|><|neutral|>こんにちは", "auto"), "ja")
         self.assertEqual(raw_language("你好", "auto"), "unknown")
+
+    def test_boundary_classification(self):
+        # Short bursts are merged only when nearby and under duration limit.
+        regions = make_regions_detailed([(0, 1.2), (1.7, 3.9), (8, 8.8)],
+                                        min_s=3, max_s=25, join_gap=0.7)
+        self.assertEqual(regions, [(0, 3.9, None), (8, 8.8, "too_short")])
+        # Uninterrupted >25s speech is NEVER silently accepted.
+        regions = make_regions_detailed([(10, 63)], 3, 25, 0.7)
+        self.assertEqual(len(regions), 3)
+        self.assertTrue(all(x[2] == "forced_cut" for x in regions))
+
+    def test_legacy_boundary_report(self):
+        with tempfile.TemporaryDirectory() as d:
+            metadata = Path(d) / "metadata.jsonl"
+            rows = [
+                {"status": "accepted", "start": 0, "end": 5},
+                {"status": "review_boundary", "start": 10, "end": 11.8},
+                {"status": "review_boundary", "start": 20, "end": 45.2},
+                {"status": "review_short", "boundary_reason": "too_short",
+                 "start": 50, "end": 51.2},
+            ]
+            metadata.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+            report = diagnostic(metadata)
+            self.assertEqual(report["status_counts"]["review_boundary"], 2)
+            self.assertEqual(report["legacy_duration_estimates_not_ground_truth"]["likely_short"], 1)
+            self.assertEqual(report["legacy_duration_estimates_not_ground_truth"]["likely_forced_cut"], 1)
+            self.assertEqual(report["explicit_boundary_reasons"]["too_short"], 1)
+            self.assertEqual(report["legacy_review_boundary_rows"], 2)
 
     def test_tail_detector(self):
         pcm = np.concatenate((np.ones(16000, dtype=np.int16) * 7000,
