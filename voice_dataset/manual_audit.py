@@ -215,8 +215,10 @@ document.getElementById("export").addEventListener("click",()=>{
 });
 updateProgress();
 </script></body></html>"""
-    page = page.replace("__COUNT__", str(len(selected)))
-    page = page.replace("__CARDS__", "\n".join(cards))
+    page = page.replace('<div class="notice small" id="progress">已完成结论：0 / __COUNT__</div>',
+                        '<div class="notice small" id="progress">已完成结论：0 / ' + str(len(selected)) + '</div>')
+    page = page.replace('<div id="samples">__CARDS__</div>',
+                        '<div id="samples">' + "\n".join(cards) + '</div>')
     (output_dir / "review.html").write_text(page, encoding="utf-8")
     report = {
         "metadata": str(metadata_path),
@@ -235,6 +237,8 @@ def apply_audit(metadata_path: Path, audit_path: Path, output_path: Path) -> dic
     metadata_path = metadata_path.expanduser().resolve()
     audit_path = audit_path.expanduser().resolve()
     output_path = output_path.expanduser().resolve()
+    if output_path == metadata_path:
+        raise ValueError("Output must be a new metadata path; the original is never overwritten")
     if not metadata_path.is_file() or not audit_path.is_file():
         raise FileNotFoundError("Metadata or audit JSON file does not exist")
     original = read_jsonl(metadata_path)
